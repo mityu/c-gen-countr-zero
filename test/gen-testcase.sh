@@ -21,7 +21,7 @@ function main {
 	extern size_t countr_zero_$typename($typename);
 	extern size_t countr_zero_${typename}_nonzero($typename);
 
-	void test_contr_zero(void) {
+	void test_countr_zero(void) {
 		TEST_CHECK(countr_zero_$typename(0) == sizeof($typename) * 8);
 		for (int i = 0; i < sizeof($typename) * 8; ++i) {
 			size_t ctz = countr_zero_$typename(($typename)1 << i);
@@ -30,7 +30,7 @@ function main {
 		}
 	}
 
-	void test_contr_zero_nonzero(void) {
+	void test_countr_zero_nonzero(void) {
 		for (int i = 0; i < sizeof($typename) * 8; ++i) {
 			size_t ctz = countr_zero_${typename}_nonzero(($typename)1 << i);
 			TEST_CHECK_(ctz == i,
@@ -39,8 +39,8 @@ function main {
 	}
 
 	TEST_LIST = {
-			{"contr_zero_$typename", test_contr_zero},
-			{"contr_zero_${typename}_nonzero", test_contr_zero_nonzero},
+			{"countr_zero_$typename", test_countr_zero},
+			{"countr_zero_${typename}_nonzero", test_countr_zero_nonzero},
 			{},
 	};
 	EOF

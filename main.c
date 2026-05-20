@@ -90,7 +90,7 @@ bool search_debruijn_seq(State *state, uintmax_t curmagic) {
   return false;
 }
 
-int gen_contr_zero(const Config *config) {
+int gen_countr_zero(const Config *config) {
   size_t bitlen = config->bitlen;
   size_t pow2_bitlen = ceil_pow2(bitlen);
   size_t seqwidth = log2_for_pow2(pow2_bitlen);
@@ -241,9 +241,9 @@ int main(int argc, char **argv) {
   Config config = {};
   bool status = parse_args(argc, argv, &config);
   if (!status || config.show_help) {
-    fprintf(stderr, "Usage: ./gen-contr-zero-c <bit-length>\n");
+    fprintf(stderr, "Usage: ./gen-countr-zero-c <bit-length>\n");
     return status ? 0 : -1;
   }
 
-  return gen_contr_zero(&config);
+  return gen_countr_zero(&config);
 }
