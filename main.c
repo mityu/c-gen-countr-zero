@@ -13,7 +13,9 @@
   } while (0)
 
 typedef struct {
-  bool support_zero;
+  bool omit_support_zero;
+  bool show_help;
+  size_t bitlen;
 } Config;
 
 typedef struct {
@@ -88,7 +90,8 @@ bool search_debruijn_seq(State *state, uintmax_t curmagic) {
   return false;
 }
 
-int gen_contr_zero(size_t bitlen) {
+int gen_contr_zero(const Config *config) {
+  size_t bitlen = config->bitlen;
   size_t pow2_bitlen = ceil_pow2(bitlen);
   size_t seqwidth = log2_for_pow2(pow2_bitlen);
   State state = {
@@ -97,9 +100,6 @@ int gen_contr_zero(size_t bitlen) {
       1, // Start from depth 1.
       (bool *)calloc(bitlen, sizeof(bool)),
       (uint8_t *)calloc(bitlen, sizeof(uint8_t)),
-  };
-  Config config = {
-      true,
   };
   state.visited[0] = true;
   if (!search_debruijn_seq(&state, 0)) {
@@ -111,9 +111,7 @@ int gen_contr_zero(size_t bitlen) {
     pow2_bitlen = 8;
   }
 
-  print_countr_zero_implementation(stdout, &state, &config);
-  config.support_zero = false;
-  print_countr_zero_implementation(stdout, &state, &config);
+  print_countr_zero_implementation(stdout, &state, config);
   safeFree(state.magic);
   safeFree(state.visited);
 
@@ -123,7 +121,7 @@ int gen_contr_zero(size_t bitlen) {
 void print_countr_zero_implementation(FILE *fp, const State *state,
                                       const Config *config) {
   size_t bitlen = state->bitlen <= 8 ? 8 : ceil_pow2(state->bitlen);
-  size_t table_size = bitlen + (config->support_zero ? 1 : 0);
+  size_t table_size = bitlen + (config->omit_support_zero ? 0 : 1);
   char *hexmagic = (char *)calloc(bitlen / 4, sizeof(char));
   size_t *hash2zeros = (size_t *)calloc(table_size, sizeof(size_t));
   char *fn_suffix = NULL;
@@ -147,12 +145,12 @@ void print_countr_zero_implementation(FILE *fp, const State *state,
   }
 
   // Build hash2zeros array.
-  if (config->support_zero) {
+  if (!config->omit_support_zero) {
     hash2zeros[0] = state->bitlen;
   }
   for (int i = 0; i <= state->bitlen; ++i) {
     uint8_t *start = state->magic + i - 1;
-    size_t offset_support_zero = config->support_zero ? 1 : 0;
+    size_t offset_support_zero = config->omit_support_zero ? 0 : 1;
     size_t len, hash;
     len = state->seqwidth;
     if (state->bitlen <= i + len) {
@@ -163,7 +161,7 @@ void print_countr_zero_implementation(FILE *fp, const State *state,
     hash2zeros[hash + offset_support_zero] = i - 1;
   }
 
-  fn_suffix = config->support_zero ? "" : "_nonzero";
+  fn_suffix = config->omit_support_zero ? "_nonzero" : "";
   fprintf(fp, "size_t countr_zero_uint%zd_t%s(uint%zd_t n) {\n", bitlen,
           fn_suffix, bitlen);
   fprintf(fp, "    static const size_t hash2zeros[%zd] = {\n", table_size);
@@ -176,10 +174,10 @@ void print_countr_zero_implementation(FILE *fp, const State *state,
   fprintf(fp, "    n = n - (n & (n - 1));\n");
   fprintf(fp, "    hash = ((uint%zd_t)(n * UINT%zd_C(0x%s)) >> %zd)", bitlen,
           bitlen, hexmagic, bitlen - state->seqwidth);
-  if (config->support_zero) {
-    fprintf(fp, " + ((uint%zd_t)(~(n - 1) | n) >> %zd);\n", bitlen, bitlen - 1);
-  } else {
+  if (config->omit_support_zero) {
     fprintf(fp, ";\n");
+  } else {
+    fprintf(fp, " + ((uint%zd_t)(~(n - 1) | n) >> %zd);\n", bitlen, bitlen - 1);
   }
   fprintf(fp, "    return hash2zeros[hash];\n");
   fprintf(fp, "}\n");
@@ -199,18 +197,53 @@ size_t into_size_t(uint8_t *start, size_t len) {
   return result;
 }
 
-int main(int argc, char **argv) {
-  size_t bitlen = 0;
-  char *endptr = NULL;
-  if (argc != 2) {
-    fprintf(stderr, "Usage: ./gen-contr-zero-c <bit-length>\n");
-    return -1;
+bool parse_args(int argc, char **argv, Config *config) {
+  static Config zero = {};
+  bool args_valid = true;
+
+  *config = zero;
+  for (int i = 1; i < argc; ++i) {
+#define STREQ(str1, str2) (strncmp(str1, str2, strlen(str2) + 1) == 0)
+    if (STREQ(argv[i], "--help") || STREQ(argv[i], "-h")) {
+      config->show_help = true;
+      return true;
+    } else if (strncmp(argv[i], "--", 2) == 0) {
+      bool inverse = strncmp(argv[i], "--no-", 5) == 0;
+      char *arg = argv[i] + (inverse ? 5 : 2);
+      if (STREQ(arg, "omit-support-zero")) {
+        config->omit_support_zero = !inverse;
+      } else {
+        args_valid = false;
+        fprintf(stderr, "Unknown option: %s\n", argv[i]);
+      }
+    } else {
+      char *endp = NULL;
+      config->bitlen = strtoul(argv[i], &endp, 10);
+      if (argv[i] == endp) {
+        args_valid = false;
+        fprintf(stderr, "strtoul: Failed to parse: %s\n", argv[i]);
+      }
+      if ((i + 1) != argc) {
+        // <bit-length> must be the last argument.
+        args_valid = false;
+        fprintf(stderr, "<bit-length> must be specified at last.\n");
+        fprintf(stderr, "Invalid trailing argument: ");
+        for (int j = i + 1; j < argc; ++j) {
+          fprintf(stderr, "%s%c", argv[j], (j + 1) == argc ? '\n' : ' ');
+        }
+      }
+    }
   }
-  bitlen = strtoul(argv[1], &endptr, 10);
-  if (argv[1] == endptr) {
-    fprintf(stderr, "strtoul: %s\n", argv[1]);
-    return -1;
+  return args_valid;
+}
+
+int main(int argc, char **argv) {
+  Config config = {};
+  bool status = parse_args(argc, argv, &config);
+  if (!status || config.show_help) {
+    fprintf(stderr, "Usage: ./gen-contr-zero-c <bit-length>\n");
+    return status ? 0 : -1;
   }
 
-  return gen_contr_zero(bitlen);
+  return gen_contr_zero(&config);
 }

@@ -18,6 +18,7 @@ build/countr_zero_uint$1_t.c: $$(TARGET)
 		echo '#include <stddef.h>'; \
 		echo ''; \
 		./$$(TARGET) $1; \
+		./$$(TARGET) --omit-support-zero $1; \
 	} > $$@
 
 .PHONY: run-test-$1bit
