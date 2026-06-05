@@ -233,6 +233,7 @@ bool parse_args(int argc, char **argv, Config *config) {
         }
       }
     }
+#undef STREQ
   }
   return args_valid;
 }
